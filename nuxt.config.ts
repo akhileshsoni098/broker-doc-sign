@@ -1,25 +1,27 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
 
-    runtimeConfig: {
+  css: ['~/assets/css/main.css'],
+
+  runtimeConfig: {
     dbHost: process.env.DB_HOST,
     dbPort: process.env.DB_PORT,
     dbUser: process.env.DB_USER,
     dbPassword: process.env.DB_PASSWORD,
     dbName: process.env.DB_NAME,
-    auth0Domain: process.env.AUTH0_DOMAIN,
-    auth0Audience: process.env.AUTH0_AUDIENCE,
+    jwtSecret: process.env.JWT_SECRET,
+    cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
+    cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
+    docusignBasePath: process.env.DOCUSIGN_BASE_PATH,
+    docusignAccountId: process.env.DOCUSIGN_ACCOUNT_ID,
+    docusignClientId: process.env.DOCUSIGN_CLIENT_ID,
+    docusignUserId: process.env.DOCUSIGN_USER_ID,
+    docusignPrivateKey: process.env.DOCUSIGN_PRIVATE_KEY,
 
     public: {
-      auth0Domain: process.env.AUTH0_DOMAIN,
-
-      auth0ClientId: process.env.AUTH0_CLIENT_ID,
-
-      auth0CallbackUrl: process.env.AUTH0_CALLBACK_URL,
-
-      auth0Audience: process.env.AUTH0_AUDIENCE,
+      appUrl: process.env.APP_URL || 'http://localhost:3000',
     },
   },
 })
