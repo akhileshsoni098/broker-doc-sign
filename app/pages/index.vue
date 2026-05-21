@@ -2,11 +2,22 @@
 const auth = useAuthStore()
 
 onMounted(async () => {
-  auth.initialize()
-  if (auth.isAuthenticated) {
+
+  onMounted(() => {
+
+  auth.init()
+
+})
+
+  if (auth.isLoggedIn) {
+
     await navigateTo('/dashboard')
+
   } else {
+
     await navigateTo('/login')
+
   }
+
 })
 </script>

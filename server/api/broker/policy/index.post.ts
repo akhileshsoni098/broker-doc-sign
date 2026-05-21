@@ -1,7 +1,10 @@
-// server/api/broker/policy/index.get.ts
+// server/api/broker/policy/index.post.ts
 
 import { defineEventHandler, createError } from "h3";
-import { getPoliciesService } from "~~/server/services/policy/policy.service";
+import {
+  parsePolicyMultipart,
+  createPolicyService,
+} from "~~/server/services/policy/policy.service";
 
 export default defineEventHandler(async (event) => {
   try {
@@ -14,7 +17,9 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    return await getPoliciesService(broker.id);
+    const { body, document } = await parsePolicyMultipart(event);
+
+    return await createPolicyService(body, broker.id, document);
   } catch (error: any) {
     return {
       status: false,

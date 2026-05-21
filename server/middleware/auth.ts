@@ -1,47 +1,88 @@
-import { jwtVerify } from "jose"
-import { eq } from "drizzle-orm"
-import { connectDB } from "~~/server/config/db"
-import { brokers } from "~~/server/models/broker/broker.model"
-import type { IBrokerJwt } from "~~/server/types/brokerProfileTypes"
+// server/middleware/auth.ts
+
+import { defineEventHandler, getHeader, createError } from "h3";
+
+import { eq } from "drizzle-orm";
+
+import { connectDB } from "~~/server/config/db";
+import { brokers } from "~~/server/models";
+
+import { verifyAccessToken } from "~~/server/services/auth/verify.service";
+
+const PUBLIC_ROUTES = [
+  "/api/public",
+  "/api/docusign/sign",
+  "/api/docusign/webhook",
+  "/api/docusign/success",
+];
 
 export default defineEventHandler(async (event) => {
-  const publicPaths = [
-    "/api/public/",
-    "/api/index.post",
-    "/api/login.post",
-    "/api/register.post",
-  ]
+  const path = getRequestURL(event).pathname;
 
-  const path = event.path || getRequestURL(event).pathname
-  if (publicPaths.some((p) => path.startsWith(p))) return
+  // ================= BYPASS =================
 
-  const authHeader = getHeader(event, "authorization")
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    throw createError({ statusCode: 401, message: "Unauthorized" })
+  const isPublicRoute = PUBLIC_ROUTES.some((route) => path.startsWith(route));
+
+  if (isPublicRoute) {
+    return;
   }
 
-  const token = authHeader.slice(7)
-  const config = useRuntimeConfig()
-  const secret = new TextEncoder().encode(config.jwtSecret)
+  console.log("Auth Middleware Triggered for Path:", path);
+  // ================= AUTH HEADER =================
 
-  try {
-    const { payload } = await jwtVerify(token, secret)
-    const jwt = payload as unknown as IBrokerJwt
+  const authorization = getHeader(event, "authorization");
 
-    const db = await connectDB()
-    const [broker] = await db
-      .select({ id: brokers.id, name: brokers.name, email: brokers.email, role: brokers.role })
-      .from(brokers)
-      .where(eq(brokers.id, jwt.id))
-      .limit(1)
-
-    if (!broker) {
-      throw createError({ statusCode: 401, message: "Broker not found" })
-    }
-
-    event.context.broker = broker
-  } catch (e: any) {
-    if (e.statusCode) throw e
-    throw createError({ statusCode: 401, message: "Invalid token" })
+  if (!authorization) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized",
+    });
   }
-})
+
+  // ================= TOKEN =================
+
+  const token = authorization.split(" ")[1];
+
+  if (!token) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Token missing",
+    });
+  }
+
+  // ================= VERIFY TOKEN =================
+
+  const decoded: any = verifyAccessToken(token);
+
+  if (!decoded) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Invalid token",
+    });
+  }
+
+  // ================= DB =================
+
+  const db = await connectDB();
+
+  // ================= FIND BROKER =================
+
+  const broker = await db.query.brokers.findFirst({
+    where: eq(brokers.id, decoded.id),
+  });
+
+  if (!broker) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Broker not found",
+    });
+  }
+
+  // ================= REMOVE PASSWORD =================
+
+  const { password, ...safeBroker } = broker;
+
+  // ================= CONTEXT =================
+
+  event.context.broker = safeBroker;
+});

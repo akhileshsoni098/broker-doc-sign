@@ -1,19 +1,44 @@
-import { updatePolicyService } from "~~/server/services/policy/policy.service"
+// server/api/broker/policy/[id].put.ts
+
+import { defineEventHandler, createError, getRouterParam } from "h3";
+import {
+  parsePolicyMultipart,
+  updatePolicyService,
+} from "~~/server/services/policy/policy.service";
+import type { IUpdatePolicyBody } from "~~/server/types/policy.type";
 
 export default defineEventHandler(async (event) => {
-  const broker = event.context.broker
-  const policyId = event.context.params!.id
-  const parts = await readMultipartFormData(event) || []
+  try {
+    const broker = event.context.broker;
 
-  let title: string | undefined
-  let description: string | undefined
-  let fileBuffer: Buffer | null = null
+    if (!broker?.id) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: "Unauthorized",
+      });
+    }
 
-  for (const part of parts) {
-    if (part.name === "title") title = part.data.toString()
-    else if (part.name === "description") description = part.data.toString()
-    else if (part.name === "document" && part.data.length > 0) fileBuffer = part.data
+    const id = Number(getRouterParam(event, "id"));
+
+    if (!id) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Invalid policy id",
+      });
+    }
+
+    const { body, document } = await parsePolicyMultipart(event);
+
+    const updateBody: IUpdatePolicyBody = {
+      title: body.title || undefined,
+      description: body.description || undefined,
+    };
+
+    return await updatePolicyService(id, broker.id, updateBody, document);
+  } catch (error: any) {
+    return {
+      status: false,
+      message: error.statusMessage || error.message || "Something went wrong",
+    };
   }
-
-  return updatePolicyService(broker.id, policyId, { title, description }, fileBuffer)
-})
+});

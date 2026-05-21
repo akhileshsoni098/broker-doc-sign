@@ -1,34 +1,81 @@
-import { eq } from "drizzle-orm"
-import { connectDB } from "~~/server/config/db"
-import { policies } from "~~/server/models/policy/policy.model"
+// server/services/publicSignedPolicyCustomer/signedPolicyByCustomer.service.ts
 
-export async function signedPolicyByCustomerService(token: string, signedFileBuffer: Buffer) {
-  const db = await connectDB()
+import { eq } from "drizzle-orm";
+import { createError } from "h3";
 
-  const [policy] = await db
-    .select()
-    .from(policies)
-    .where(eq(policies.signingToken, token))
-    .limit(1)
+import { connectDB } from "~~/server/config/db";
+import { policies } from "~~/server/models";
 
-  if (!policy) throw createError({ statusCode: 404, message: "Invalid signing link" })
-  if (policy.status === "signed") throw createError({ statusCode: 400, message: "Document already signed" })
+import {
+  downloadCompletedEnvelopePdf,
+  getDocusignAccessToken,
+} from "~~/server/utils/docusign";
 
-  const { uploadDocument } = await import("~~/server/utils/cloudinary")
-  const result = await uploadDocument(signedFileBuffer)
+import { uploadSingleFile } from "~~/server/utils/uploadToCloudinary";
 
-  await db
+export const signPolicyService = async (envelopeId: string) => {
+  const db = await connectDB();
+
+  const policy = await db.query.policies.findFirst({
+    where: eq(policies.docusignEnvelopeId, envelopeId),
+  });
+
+  if (!policy) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Policy not found",
+    });
+  }
+
+  if (policy.status === "signed") {
+    return {
+      status: true,
+      message: "Policy already signed",
+      data: policy,
+    };
+  }
+
+  const config = useRuntimeConfig();
+  const accessToken = await getDocusignAccessToken();
+
+  const pdfBuffer = await downloadCompletedEnvelopePdf({
+    accessToken,
+    accountId: config.docusignAccountId,
+    basePath: config.docusignBasePath,
+    envelopeId,
+  });
+
+  const uploadResult = await uploadSingleFile(
+    {
+      data: pdfBuffer,
+      filename: `signed-policy-${policy.id}.pdf`,
+      type: "application/pdf",
+    },
+    "signed_policies",
+    "raw"
+  );
+
+  if (!uploadResult.status || !uploadResult.data) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: uploadResult.message,
+    });
+  }
+
+  const updated = await db
     .update(policies)
     .set({
       status: "signed",
-      signedPdfUrl: result.url,
       signedAt: new Date(),
+      signedPdfUrl: uploadResult.data.url,
       updatedAt: new Date(),
     })
-    .where(eq(policies.id, policy.id))
+    .where(eq(policies.docusignEnvelopeId, envelopeId))
+    .returning();
 
-  const { emitPolicySigned } = await import("~~/server/utils/notification")
-  emitPolicySigned(policy.brokerId, policy.title)
-
-  return { success: true, message: "Document signed successfully" }
-}
+  return {
+    status: true,
+    message: "Policy signed successfully",
+    data: updated[0],
+  };
+};

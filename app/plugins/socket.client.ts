@@ -1,28 +1,28 @@
-import { io } from "socket.io-client"
+import { io } from "socket.io-client";
 
 export default defineNuxtPlugin(() => {
-  const auth = useAuthStore()
+  const auth = useAuthStore();
 
-  if (!auth.isAuthenticated) return
+  if (!auth.isLoggedIn) return;
 
   const socket = io(window.location.origin, {
     transports: ["websocket", "polling"],
-  })
+  });
 
   socket.on("connect", () => {
-    socket.emit("join:broker", auth.brokerId)
-  })
+    socket.emit("join:broker", auth.brokerId);
+  });
 
   socket.on("policy:signed", (data: { policyTitle: string }) => {
-    const toast = document.createElement("div")
-    toast.className = "socket-toast"
-    toast.textContent = `✅ "${data.policyTitle}" has been signed!`
-    document.body.appendChild(toast)
-    setTimeout(() => toast.remove(), 5000)
-  })
+    const toast = document.createElement("div");
+    toast.className = "socket-toast";
+    toast.textContent = `✅ "${data.policyTitle}" has been signed!`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+  });
 
   if (import.meta.client) {
-    const style = document.createElement("style")
+    const style = document.createElement("style");
     style.textContent = `
       .socket-toast {
         position: fixed; bottom: 1.5rem; right: 1.5rem;
@@ -34,7 +34,7 @@ export default defineNuxtPlugin(() => {
         animation: slideUp .3s ease;
       }
       @keyframes slideUp { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
-    `
-    document.head.appendChild(style)
+    `;
+    document.head.appendChild(style);
   }
-})
+});

@@ -1,19 +1,41 @@
-import { eq } from "drizzle-orm"
-import { connectDB } from "~~/server/config/db"
-import { policies } from "~~/server/models/policy/policy.model"
+// server/services/publicSignedPolicyCustomer/fetchSigningPolicy.service.ts
 
-export async function fetchSigningPolicyService(token: string) {
-  const db = await connectDB()
+import { and, eq } from "drizzle-orm";
+import { createError } from "h3";
 
-  const [policy] = await db
-    .select()
-    .from(policies)
-    .where(eq(policies.signingToken, token))
-    .limit(1)
+import { connectDB } from "~~/server/config/db";
+import { policies } from "~~/server/models";
+import { verifySigningToken } from "~~/server/services/policy/signingToken.service";
 
-  if (!policy) {
-    throw createError({ statusCode: 404, message: "Invalid signing link" })
+export const getPolicyBySigningTokenService = async (token: string) => {
+  const decoded = verifySigningToken(token);
+
+  if (!decoded) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Invalid signing link",
+    });
   }
 
-  return { success: true, policy: { ...policy, brokerId: undefined } }
-}
+  const db = await connectDB();
+
+  const policy = await db.query.policies.findFirst({
+    where: and(
+      eq(policies.id, decoded.policyId),
+      eq(policies.brokerId, decoded.brokerId),
+      eq(policies.signingToken, token)
+    ),
+  });
+
+  if (!policy) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Invalid signing link",
+    });
+  }
+
+  return {
+    status: true,
+    data: policy,
+  };
+};
